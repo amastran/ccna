@@ -1,0 +1,37 @@
+Host sii-unifi.finmatica.local
+  HostName sii-unifi.finmatica.local
+  User root
+
+
+Host sii-oxidized.finmatica.local
+  HostName sii-oxidized.finmatica.local
+  User root
+  IdentityFile ~/.ssh/id_ed25519
+  ProxyJump mastrow11
+
+ Host mastrow11
+    HostName mastrow11.finmatica.local
+    User FINMATICA\\amastrangelo
+    IdentityFile ~/.ssh/id_ed25519
+    ForwardAgent yes
+    StrictHostKeyChecking no
+    UserKnownHostsFile /dev/null
+
+# Tutti gli host nel dominio finmatica.local (tranne il bastion)
+Host *.finmatica.local !mastrow11
+    User FINMATICA\\amastrangelo
+    IdentityFile ~/.ssh/id_ed25519
+    ProxyJump mastrow11
+
+# Tutti gli IP delle reti specificate passano per il bastion
+Host 10.27.* 10.29.* 10.30.* 10.96.* 10.97.* 10.210.* 10.220.* 10.0.* 10.98.* 10.101.* 172.16.* 172.21.* 192.168.79.* 151.4.92.*
+    User FINMATICA\\amastrangelo
+    IdentityFile ~/.ssh/id_ed25519
+    ProxyJump mastrow11
+
+Host github.com
+  HostName github.com
+  User git
+  IdentityFile ~/.ssh/id_ed25519
+  UseKeychain yes
+  AddKeysToAgent yes
