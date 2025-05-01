@@ -1,0 +1,10 @@
+#!/sbin/openrc-run
+
+command=/usr/sbin/udhcpd
+command_args="/etc/udhcpd.conf"
+pidfile=/run/udhcpd.pid
+name="udhcpd"
+
+depend() {
+    need net
+}
