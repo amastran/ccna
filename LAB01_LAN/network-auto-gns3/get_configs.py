@@ -1,28 +1,37 @@
 from netmiko import ConnectHandler
 from datetime import datetime
+import sys
 
-# Parametri di connessione per il router R2
-r2 = {
+# Verifica il numero di argomenti
+if len(sys.argv) != 4:
+    print("Uso: get_configs.py <host> <username> <password>")
+    sys.exit(1)
+
+# Parametri da riga di comando
+host = sys.argv[1]
+username = sys.argv[2]
+password = sys.argv[3]
+
+# Parametri Netmiko
+device = {
     "device_type": "cisco_ios",
-    "host": "192.168.218.1",
-    "username": "admin",
-    "password": "55405540",
-    "secret": "55405540"  # Password per entrare in modalità enable
+    "host": host,
+    "username": username,
+    "password": password,
+    "secret": password
 }
 
-print(f"Connettendo a R2 ({r2['host']})...")
+print(f"Connettendo a {host} come {username}...")
 
 try:
-    # Connessione SSH a R2
-    net_connect = ConnectHandler(**r2)
-    net_connect.enable()  # Entra in modalità privilegiata (enable)
+    net_connect = ConnectHandler(**device)
+    net_connect.enable()
 
-    # Esecuzione comando show running-config
     output = net_connect.send_command("show running-config")
 
-    # Salvataggio su file con timestamp
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"R2_running-config_{timestamp}.txt"
+    filename = f"{host}_running-config_{timestamp}.txt"
+
     with open(filename, "w") as f:
         f.write(output)
 
@@ -30,4 +39,4 @@ try:
     net_connect.disconnect()
 
 except Exception as e:
-    print(f"Errore su R2: {e}")
+    print(f"Errore: {e}")
