@@ -1,0 +1,14 @@
+flush ruleset
+
+table ip nat {
+    chain prerouting {
+        type nat hook prerouting priority -100;
+    }
+
+    chain postrouting {
+        type nat hook postrouting priority 100;
+
+        # Regola NAT con log, contatore e masquerading
+        ip saddr 192.168.237.0/24 oifname "eth0" log prefix "NAT POSTROUTING: " counter masquerade
+    }
+}
