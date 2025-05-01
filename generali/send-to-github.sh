@@ -24,7 +24,7 @@ check_dependency() {
         apt) sudo apt update && sudo apt install -y "$pkg" ;;
         dnf) sudo dnf install -y "$pkg" ;;
         yum) sudo yum install -y "$pkg" ;;
-        apk) sudo apk add "$pkg" ;;
+        apk) apk add "$pkg" ;;  # Niente sudo su Alpine
         *) echo "Impossibile installare '$pkg': gestore pacchetti sconosciuto." && exit 1 ;;
       esac
     else
@@ -57,8 +57,8 @@ check_dependency curl
 check_dependency jq
 check_dependency base64
 
-# Codifica in base64
-ENCODED_CONTENT=$(base64 -w 0 "$LOCAL_FILE" 2>/dev/null || base64 "$LOCAL_FILE" | tr -d '\n')
+# Codifica in base64 (compatibile anche con Alpine)
+ENCODED_CONTENT=$(base64 "$LOCAL_FILE" | tr -d '\n')
 
 # Recupera SHA se il file già esiste
 SHA=$(curl -s \
