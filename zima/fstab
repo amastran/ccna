@@ -1,5 +1,0 @@
-# <file system> <mount point> <type> <options> <dump> <pass>
-/dev/pve/root / ext4 errors=remount-ro 0 1
-/dev/pve/swap none swap sw 0 0
-proc /proc proc defaults 0 0
-#UUID=2f209a1f-66a8-49ee-ba97-80b31a30d82d /mnt/usbkey01 ext4 defaults,umask=000 0 0
