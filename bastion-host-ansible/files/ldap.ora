@@ -1,0 +1,3 @@
+DIRECTORY_SERVERS=(tnsldap.finmatica.local:389)
+DEFAULT_ADMIN_CONTEXT="dc=finmatica, dc=local"
+DIRECTORY_SERVER_TYPE = OID

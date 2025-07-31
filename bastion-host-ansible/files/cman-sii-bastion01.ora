@@ -1,0 +1,30 @@
+cman-test = (configuration=
+  (address=(protocol=tcp)(host=sii-bastion01.finmatica.local)(port=1521))
+  (parameter_list=
+    (log_level=ADMIN)
+    (max_connections=1024)
+    (idle_timeout=0)
+    (registration_invited_nodes=*)
+    (inbound_connect_timeout=0)
+    (session_timeout=0)
+    (outbound_connect_timeout=0)
+    (max_gateway_processes=16)
+    (min_gateway_processes=2)
+    (remote_admin=on)
+    (trace_level=off)
+    (max_cmctl_sessions=4)
+    (event_group=init_and_term, memory_ops)
+  )
+  (rule_list=
+    (rule=
+      (src=*)(dst=*)(srv=*)(act=accept)
+      (action_list=
+        (aut=off)
+        (moct=0)
+        (mct=0)
+        (mit=0)
+        (conn_stats=on)
+      )
+    )
+  )
+)

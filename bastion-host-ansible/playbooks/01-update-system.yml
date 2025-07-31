@@ -1,0 +1,93 @@
+---
+- name: Aggiorna sistema Oracle Linux e configura ambiente
+  hosts: all
+  become: true
+  tasks:
+
+    - name: Esegui dnf update
+      ansible.builtin.dnf:
+        name: '*'
+        state: latest
+        update_cache: true
+
+    - name: Imposta timezone a Europe/Rome
+      community.general.timezone:
+        name: "Europe/Rome"
+
+    - name: Disabilita SELinux a runtime
+      ansible.builtin.command: setenforce 0
+      when: ansible_facts.selinux.status == "enabled"
+      ignore_errors: true
+
+    - name: Disabilita SELinux in modo permanente
+      ansible.builtin.replace:
+        path: /etc/selinux/config
+        regexp: '^SELINUX=.*'
+        replace: 'SELINUX=disabled'
+      when: ansible_facts.selinux.status == "enabled"
+      ignore_errors: true
+
+    - name: Disabilita e ferma firewalld
+      ansible.builtin.systemd:
+        name: firewalld
+        state: stopped
+        enabled: false
+
+    - name: Aggiungi entry per sii-bastion01 in /etc/hosts se non presente
+      ansible.builtin.lineinfile:
+        path: /etc/hosts
+        line: "10.97.11.215  sii-bastion01 sii-bastion01.finmatica.local"
+        state: present
+        create: yes
+
+
+    # ---- BLOCCO SWAP INIZIO ----
+
+    - name: Crea file di swap se non esiste
+      ansible.builtin.command: fallocate -l 4G /swapfile
+      args:
+        creates: /swapfile
+
+    - name: Imposta permessi corretti sul file di swap
+      ansible.builtin.file:
+        path: /swapfile
+        owner: root
+        group: root
+        mode: '0600'
+
+    - name: Inizializza swap solo se necessario (controlla intestazione)
+      ansible.builtin.shell: |
+        if ! file /swapfile | grep -q 'swap file'; then
+          mkswap /swapfile
+        fi
+
+    - name: Abilita lo swap solo se non attivo
+      ansible.builtin.shell: |
+        grep -q '^/swapfile ' /proc/swaps || swapon /swapfile
+      register: swapon_result
+      changed_when: swapon_result.rc == 0
+      failed_when: swapon_result.rc != 0 and 'already in use' not in swapon_result.stderr and 'is already in use' not in swapon_result.stderr
+
+    - name: Rendi lo swap persistente in /etc/fstab
+      ansible.builtin.lineinfile:
+        path: /etc/fstab
+        regexp: '^/swapfile'
+        line: '/swapfile none swap sw 0 0'
+        state: present
+
+    # ---- BLOCCO SWAP FINE ----
+
+    - name: Riavvia se necessario (solo RedHat family)
+      ansible.builtin.reboot:
+        msg: "Riavvio automatico dopo aggiornamento del sistema"
+        connect_timeout: 5
+        reboot_timeout: 600
+      when: ansible_facts['os_family'] == "RedHat"
+
+    - name: Verifica swap attivo dopo reboot
+      ansible.builtin.command: swapon --show
+      register: swap_status
+
+    - name: Mostra swap attivo dopo reboot
+      ansible.builtin.debug:
+        var: swap_status.stdout_lines

@@ -1,0 +1,79 @@
+# playbook-repos-tools.yml
+---
+- name: Abilita repository OL9 & EPEL e installa tool di base
+  hosts: all            # o il tuo gruppo di host Oracle Linux 9
+  become: yes
+  gather_facts: yes
+
+  vars:
+    # Repository da abilitare (id come definiti in /etc/yum.repos.d/*.repo)
+    repos_enable:
+      - ol9_baseos_latest
+      - ol9_appstream
+      - ol9_developer_EPEL
+
+    # Pacchetti da installare
+    tools:
+      - nano
+      - mlocate
+      - htop
+      - vim-enhanced
+      - nmap
+      - nmap-ncat
+      - rsync
+      - tcpdump
+      - bind-utils
+      - oracle-database-preinstall-19c
+      - unzip
+      - wget
+      - curl
+      - lsof
+      - gcc
+      - make
+      - binutils
+      - glibc-devel
+      - elfutils-libelf-devel
+      - libnsl
+  tasks:
+    # ------------------------------------------------------------------
+    # Repo & prerequisiti
+    # ------------------------------------------------------------------
+    - name: Installa pacchetti di rilascio Oracle ed EPEL (se mancanti)
+      ansible.builtin.dnf:
+        name:
+          - oraclelinux-release-el9        # file .repo di BaseOS/AppStream
+          - oracle-epel-release-el9        # file .repo di EPEL
+          - dnf-plugins-core               # offre dnf config-manager
+        state: present
+      register: pkg_release
+
+    # Abilita repo necessari solo se non già abilitati (idempotente)
+    - name: Abilita repository richiesti
+      ansible.builtin.command: >
+        dnf config-manager --set-enabled {{ item }}
+      loop: "{{ repos_enable }}"
+      changed_when: "'already enabled' not in cmd_result.stdout"
+      register: cmd_result
+      when: pkg_release is succeeded
+
+    # ------------------------------------------------------------------
+    # Aggiorna metadata e installa tool
+    # ------------------------------------------------------------------
+    - name: Aggiorna cache DNF
+      ansible.builtin.dnf:
+        update_cache: yes
+
+    - name: Installa tool richiesti
+      ansible.builtin.dnf:
+        name: "{{ tools }}"
+        state: present
+        enablerepo: "{{ repos_enable }}"
+        update_cache: no
+
+    # ------------------------------------------------------------------
+    # Post‑install
+    # ------------------------------------------------------------------
+    - name: Aggiorna il database locate
+      ansible.builtin.command: updatedb
+      when: tools | select('match','mlocate') | list | length > 0
+      changed_when: false

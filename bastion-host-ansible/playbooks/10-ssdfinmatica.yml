@@ -1,0 +1,92 @@
+---
+- name: Installa utilità di base e distribuisce configurazioni SSSD / LDAP
+  hosts: all
+  become: yes
+  gather_facts: false        # attivalo se ti servono facts
+
+  vars:
+    # Pacchetti da installare
+    pacchetti:
+      - nscd
+      - sssd
+      - oddjob-mkhomedir
+      - authconfig
+      - mlocate
+
+    # File sorgenti sul nodo di controllo
+    sssd_src: "/home/andrea/bastion-host-ansible/files/sssd.conf"
+    pem_src:  "/home/andrea/bastion-host-ansible/files/finmatica.pem"
+
+    # Destinazioni sul target
+    sssd_dest_dir:  "/etc/sssd"
+    sssd_dest_file: "{{ sssd_dest_dir }}/sssd.conf"
+    pem_dest_dir:   "/etc/openldap/certs"
+    pem_dest_file:  "{{ pem_dest_dir }}/finmatica.pem"
+
+  tasks:
+  # ------------------------------------------------------------------ #
+  #  Installazione pacchetti
+  # ------------------------------------------------------------------ #
+  - name: Installa i pacchetti richiesti
+    ansible.builtin.dnf:
+      name: "{{ pacchetti }}"
+      state: present         # usa "latest" se vuoi sempre l’ultima versione
+      update_cache: true
+
+  # ------------------------------------------------------------------ #
+  #  Distribuzione SSSD
+  # ------------------------------------------------------------------ #
+  - name: Assicura che la directory /etc/sssd esista
+    ansible.builtin.file:
+      path: "{{ sssd_dest_dir }}"
+      state: directory
+      owner: root
+      group: root
+      mode: '0755'
+
+  - name: Copia sssd.conf
+    ansible.builtin.copy:
+      src:  "{{ sssd_src }}"
+      dest: "{{ sssd_dest_file }}"
+      owner: root
+      group: root
+      mode: '0600'           # SSSD pretende 600
+
+  # ------------------------------------------------------------------ #
+  #  Distribuzione certificato LDAP
+  # ------------------------------------------------------------------ #
+  - name: Assicura che la directory /etc/openldap/certs esista
+    ansible.builtin.file:
+      path: "{{ pem_dest_dir }}"
+      state: directory
+      owner: root
+      group: root
+      mode: '0755'
+
+  - name: Copia finmatica.pem
+    ansible.builtin.copy:
+      src:  "{{ pem_src }}"
+      dest: "{{ pem_dest_file }}"
+      owner: root
+      group: root
+      mode: '0644'           # permessi tipici PEM
+
+  # ------------------------------------------------------------------ #
+  #  Avvio e verifica SSSD, poi authconfig
+  # ------------------------------------------------------------------ #
+  - name: Avvia il servizio sssd (senza abilitarlo)
+    ansible.builtin.systemd:
+      name: sssd
+      state: started
+    register: sssd_start
+
+  - name: Verifica che sssd sia active
+    ansible.builtin.command: systemctl is-active sssd
+    register: sssd_state
+    changed_when: false
+    failed_when: sssd_state.stdout != 'active'
+
+  - name: Configura NSS/PAM per SSSD con authconfig
+    ansible.builtin.command: >
+      authconfig --enablesssd --enablesssdauth --enablemkhomedir --update
+    when: sssd_state.stdout == 'active'

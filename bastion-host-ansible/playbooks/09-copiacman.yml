@@ -1,0 +1,175 @@
+---
+- name: Install Oracle CMAN 19c
+  hosts: all
+  become: yes
+  gather_facts: false
+
+  vars:
+    oracle_user: oracle
+
+    # --- file sorgenti sul nodo di controllo ----------------------------
+    cman_rsp_src:          "/home/andrea/bastion-host-ansible/files/cman.rsp"
+    client_zip_src:        "/home/andrea/bastion-host-ansible/files/LINUX.X64_193000_client.zip"
+    cman_ora_src:          "/home/andrea/bastion-host-ansible/files/cman-bastion01.ora"
+    cman_cfg_src:          "/home/andrea/bastion-host-ansible/files/cman.ora"
+    ldap_ora_src:          "/home/andrea/bastion-host-ansible/files/ldap.ora"
+    sqlnet_ora_src:        "/home/andrea/bastion-host-ansible/files/sqlnet.ora"
+    cman_script_src:       "/home/andrea/bastion-host-ansible/files/cman_service.sh"
+    cman_service_unit_src: "/home/andrea/bastion-host-ansible/files/cman-test.service.sh"
+
+    # --- destinazioni sul target ---------------------------------------
+    oracle_home:       "/home/oracle"
+    stage_dir:         "{{ oracle_home }}/stage"
+    client_zip_dest:   "/tmp/LINUX.X64_193000_client.zip"
+    tns_admin_path:    "/base/app/oracle/network/admin"
+    oracle_home_path:  "/base/app/oracle/product/cman1930"
+    oracle_scripts_path: "/base/app/oracle/scripts"
+
+  tasks:
+  # ---------------------------------------------------------------------
+  #  Copia file di risposta e pacchetto ZIP
+  # ---------------------------------------------------------------------
+  - name: Copia cman.rsp
+    become_user: "{{ oracle_user }}"
+    ansible.builtin.copy:
+      src: "{{ cman_rsp_src }}"
+      dest: "{{ oracle_home }}/cman.rsp"
+      mode: '0644'
+
+  # - name: Copia il pacchetto client 19c zip
+  #   become_user: "{{ oracle_user }}"
+  #   ansible.builtin.copy:
+  #     src: "{{ client_zip_src }}"
+  #     dest: "{{ client_zip_dest }}"
+  #     mode: '0644'
+
+  # ---------------------------------------------------------------------
+  #  Unzip del client e controllo runInstaller
+  # ---------------------------------------------------------------------
+  - name: Scompatta il client 19c in {{ stage_dir }}
+    become_user: "{{ oracle_user }}"
+    ansible.builtin.unarchive:
+      src: "{{ client_zip_dest }}"
+      dest: "{{ stage_dir }}"
+      remote_src: true
+      creates: "{{ stage_dir }}/client/runInstaller"
+
+  - name: Verifica presenza di runInstaller
+    become_user: "{{ oracle_user }}"
+    ansible.builtin.stat:
+      path: "{{ stage_dir }}/client/runInstaller"
+    register: ri_stat
+    failed_when: not ri_stat.stat.exists
+
+  # ---------------------------------------------------------------------
+  #  Work-around libreria e installazione silenziosa
+  # ---------------------------------------------------------------------
+  - name: Crea libpthread_nonshared.a (work-around)
+    ansible.builtin.command: ar cr /usr/lib64/libpthread_nonshared.a
+
+  - name: Installa Oracle CMAN in modalità silenziosa
+    become_user: "{{ oracle_user }}"
+    ansible.builtin.shell: >
+      export CV_ASSUME_DISTID=OEL7.8 &&
+      "{{ stage_dir }}/client/runInstaller" -silent -showProgress -ignorePrereq -ignoreSysPrereqs -waitforcompletion -responseFile "{{ oracle_home }}/cman.rsp" ORACLE_HOME_NAME=cman1930
+    args:
+      chdir: "{{ oracle_home }}"
+    register: install_res
+    failed_when: install_res.rc != 0
+
+  - name: Debug installazione (stdout)
+    ansible.builtin.debug:
+      var: install_res.stdout
+
+  - name: Debug installazione (stderr)
+    ansible.builtin.debug:
+      var: install_res.stderr
+
+  # ---------------------------------------------------------------------
+  #  Script root post-install
+  # ---------------------------------------------------------------------
+  - name: Esegui orainstRoot.sh
+    ansible.builtin.command: /base/app/oraInventory/orainstRoot.sh
+    register: orainst
+    failed_when: orainst.rc != 0
+
+  - name: Esegui root.sh di CMAN
+    ansible.builtin.command: /base/app/oracle/product/cman1930/root.sh
+    register: rootsh
+    failed_when: rootsh.rc != 0
+
+  # ---------------------------------------------------------------------
+  #  File di configurazione .ora
+  # ---------------------------------------------------------------------
+  - name: Assicura directory {{ tns_admin_path }}
+    become_user: "{{ oracle_user }}"
+    ansible.builtin.file:
+      path: "{{ tns_admin_path }}"
+      state: directory
+      mode: '0755'
+
+  - name: Copia file .ora
+    become_user: "{{ oracle_user }}"
+    ansible.builtin.copy:
+      src: "{{ item.src }}"
+      dest: "{{ tns_admin_path }}/{{ item.dest }}"
+      owner: "{{ oracle_user }}"
+      group: oinstall
+      mode: '0644'
+    loop:
+      - { src: "{{ cman_ora_src }}",   dest: "cman-test.ora" }
+      - { src: "{{ cman_cfg_src }}",   dest: "cman.ora"      }
+      - { src: "{{ ldap_ora_src }}",   dest: "ldap.ora"      }
+      - { src: "{{ sqlnet_ora_src }}", dest: "sqlnet.ora"    }
+
+  # ---------------------------------------------------------------------
+  #  Script utility e verifica eseguibilità
+  # ---------------------------------------------------------------------
+  - name: Assicura directory {{ oracle_scripts_path }}
+    become_user: "{{ oracle_user }}"
+    ansible.builtin.file:
+      path: "{{ oracle_scripts_path }}"
+      state: directory
+      mode: '0755'
+
+  - name: Copia e rendi eseguibile cman_service.sh
+    become_user: "{{ oracle_user }}"
+    ansible.builtin.copy:
+      src: "{{ cman_script_src }}"
+      dest: "{{ oracle_scripts_path }}/cman_service.sh"
+      owner: "{{ oracle_user }}"
+      group: oinstall
+      mode: '0755'
+
+  # ---------------------------------------------------------------------
+  #  Variabili di ambiente
+  # ---------------------------------------------------------------------
+  - name: Imposta variabili Oracle globali in /etc/profile
+    ansible.builtin.blockinfile:
+      path: /etc/profile
+      block: |
+        export TNS_ADMIN={{ tns_admin_path }}
+        export ORACLE_HOME={{ oracle_home_path }}
+        export PATH=$ORACLE_HOME/bin:$PATH
+      marker: "# {mark} ORACLE ENV CONFIG"
+
+  # ---------------------------------------------------------------------
+  #  Servizio systemd
+  # ---------------------------------------------------------------------
+  - name: Installa unit file cman-test.service
+    ansible.builtin.copy:
+      src: "{{ cman_service_unit_src }}"
+      dest: "/etc/systemd/system/cman-test.service"
+      owner: root
+      group: root
+      mode: '0755'
+
+  - name: Ricarica configurazione systemd
+    ansible.builtin.systemd:
+      daemon_reload: true
+
+  # ---------------------------------------------------------------------
+  #  Aggiorna database locate
+  # ---------------------------------------------------------------------
+  - name: Aggiorna il database locate
+    ansible.builtin.command: updatedb

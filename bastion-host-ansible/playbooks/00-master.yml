@@ -1,0 +1,7 @@
+---
+- import_playbook: 01-update-system.yml
+- import_playbook: 05-prereq.yml
+- import_playbook: 06-copy-zip.yml
+- import_playbook: 07-oracle-home-ridotto.yml
+- import_playbook: 09-copiacman.yml
+- import_playbook: 10-ssdfinmatica.yml

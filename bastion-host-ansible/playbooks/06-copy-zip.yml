@@ -1,0 +1,31 @@
+---
+- name: Copia Oracle Instant Client 19c nel container e imposta i permessi
+  hosts: all
+  become: true
+
+  vars:
+    local_zip: "/home/andrea/bastion-host-ansible/files/LINUX.X64_193000_client.zip"
+    remote_dir: /tmp
+    remote_zip: /tmp/LINUX.X64_193000_client.zip
+
+  # pre_tasks:
+  #   - name: Assicura che rsync sia installato nel container
+  #     ansible.builtin.package:
+  #       name: rsync
+  #       state: present
+
+  tasks:
+    - name: Copia lo ZIP su bastion01 (modulo synchronize)
+      ansible.builtin.synchronize:
+        src: "{{ local_zip }}"
+        dest: "{{ remote_dir }}/"
+        mode: push
+        archive: yes
+        rsync_opts:
+          - "--info=progress2"
+          - "--human-readable"
+
+    - name: Imposta permessi 777 sullo ZIP (deve essere ottale)
+      ansible.builtin.file:
+        path: "{{ remote_zip }}"
+        mode: "0777"
